@@ -82,10 +82,12 @@ static char g_src[80];
 static char g_dst[80];
 static char g_prj[80];
 static int g_fd = -1;				// current open device/file/source handle
+static int g_dps = -1;				// current open backup type (DPS12/16)
 static AkaiOsDisk g_disk;			// current open disk (if any)
 static AkaiOsProject g_proj;		// current open project (if any)
 static GtkWidget *g_main;			// main window, useful for dialogs etc.
 static GtkWidget *g_info;			// information window, updated everywhere
+static GtkWidget *g_multi;			// multi-project menu handle, updated by new data
 
 // Notebook tabs
 #define TAB_TRACKS	0
@@ -111,7 +113,7 @@ static gboolean quit(GtkWidget *w, GdkEvent *e, gpointer d) {
 
 // change main window title (and save values)
 void set_title(char *src, char *dst, char *prj) {
-	static char buf[80];
+	static char buf[1024];
 	snprintf(buf, sizeof(buf), "DeepStripper (%s->%s) - %s",
 		src?src:g_src, dst?dst:g_dst, prj?prj:g_prj);
 	if (src) strcpy(g_src, src);
@@ -121,6 +123,20 @@ void set_title(char *src, char *dst, char *prj) {
 }
 
 // Create a scrollable list box
+static void list_selected_iter(GtkTreeModel *model, GtkTreePath *path,
+								GtkTreeIter *iter, gpointer d) {
+	if ((int)d == TAB_TRACKS) {
+		gchar *trk=NULL;
+		gtk_tree_model_get(model, iter, 0, &trk, -1);
+		_DBG(_DBG_GUI,"selected track: %s\n", trk);
+		g_free(trk);
+	}
+}
+
+static void list_selection_changed(GtkTreeSelection *sel, gpointer d) {
+	gtk_tree_selection_selected_foreach(sel, list_selected_iter, d);
+}
+
 static GtkWidget *make_list(char *data, gint idx) {
 	GtkWidget *scroll, *tree, *list;
 	GtkListStore *model;
@@ -143,6 +159,8 @@ static GtkWidget *make_list(char *data, gint idx) {
 	cell = gtk_cell_renderer_text_new();
 	col = gtk_tree_view_column_new_with_attributes(data, cell, "text", 0, NULL);
 	gtk_tree_view_append_column(GTK_TREE_VIEW(tree), col);
+	g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(tree)),
+		 "changed", G_CALLBACK(list_selection_changed), (gpointer)idx);
 	gtk_widget_show(tree);
 
 	return scroll;
@@ -164,24 +182,36 @@ static void about_box(char *msg) {
 	gtk_widget_destroy(about);
 }
 
-// Fill in a listbox with text items
-static void populate(gint idx, gchar **data) {
-	GtkTreeIter iter;
-
-	while(data && *data) {
-		gtk_list_store_append(GTK_LIST_STORE(g_data[idx]), &iter);
-		gtk_list_store_set(GTK_LIST_STORE(g_data[idx]), &iter, 0, *data, -1);
-		++data;
+// Manipulate multi menu
+static void clear_multi() {
+	if (g_multi) {
+		_DBG(_DBG_GUI, "cleared g_multi\n");
+		GtkWidget *sub = gtk_menu_item_get_submenu(GTK_MENU_ITEM(g_multi));
+		if (sub)
+			gtk_widget_destroy(sub);
+		gtk_menu_item_set_submenu(GTK_MENU_ITEM(g_multi), NULL);
 	}
 }
 
-// Manipulate multi menu
-static void clear_multi() {
-	// TODO:XXX
+static void multi_menu(GtkMenuItem *item, gpointer d) {
+	menu(d, MID_MULTI, GTK_WIDGET(item));
 }
 
 static void add_multi(char *name) {
-	// TODO:XXX
+	if (g_multi) {
+		GtkWidget *sub = gtk_menu_item_get_submenu(GTK_MENU_ITEM(g_multi));
+		GtkWidget *item = gtk_menu_item_new_with_label(name);
+		gtk_widget_show(item);
+		if (!sub) {
+			sub = gtk_menu_new();
+			gtk_widget_show(sub);
+			gtk_menu_item_set_submenu(GTK_MENU_ITEM(g_multi), sub);
+			_DBG(_DBG_GUI, "new g_multi->sub\n");
+		}
+		g_signal_connect(item, "activate", G_CALLBACK(multi_menu), (gpointer)name);
+		gtk_menu_append(GTK_MENU(sub), item);
+//		_DBG(_DBG_GUI, "append g_multi->sub, %s\n", name);
+	}
 }
 
 // Set info text
@@ -199,8 +229,18 @@ static void show_project_info() {
 	}
 }
 
-// Close all data sources
-static void close_backup() {
+// Add item to listbox in specified tab
+static int add_to_list(char *item, void *d) {
+	int idx = (int)d;
+	GtkTreeIter iter;
+
+	gtk_list_store_append(GTK_LIST_STORE(g_data[idx]), &iter);
+	gtk_list_store_set(GTK_LIST_STORE(g_data[idx]), &iter, 0, item, -1);
+	return 0;
+}
+
+// Close this current project (if any)
+static void close_project() {
 	// Empty all data
 	int i;
 	for (i=0; i<N_TABS; i++) {
@@ -208,12 +248,7 @@ static void close_backup() {
 	}
 	set_info(DEFAULT_INFO);
 	akaiosproject_clear(&g_proj);
-	akaiosdisk_clear(&g_disk);
-	if (g_fd>=0) {
-		close(g_fd);
-		g_fd = -1;
-	}
-	set_title("?", NULL, "");
+	set_title(NULL, NULL, "");
 }
 
 // Open a specific project or entire backup (into g_proj)
@@ -222,6 +257,7 @@ static void open_project(int type, char *name) {
 		about_box("Attempting to open a project without opening a backup");
 		return;
 	}
+	close_project();
 	if (name) {
 		off64_t off = akaiosdisk_project(&g_disk, name);
 		if (!off) {
@@ -235,8 +271,24 @@ static void open_project(int type, char *name) {
 	}
 	if (akaiosproject_read(g_fd, type, &g_proj)) {
 		about_box("Unable to read project");
+		return;
 	}
+	set_title(NULL, NULL, name);
+	akaiosproject_tracks(&g_proj, add_to_list, (void *)TAB_TRACKS);
+	akaiosproject_mixes(&g_proj, add_to_list, (void *)TAB_TRACKS);
+	akaiosproject_memory(&g_proj, add_to_list, (void *)TAB_TRACKS);
 	show_project_info();
+}
+
+// Close all data sources (if any)
+static void close_backup() {
+	close_project();
+	akaiosdisk_clear(&g_disk);
+	if (g_fd>=0) {
+		close(g_fd);
+		g_fd = -1;
+	}
+	set_title("?", NULL, "");
 }
 
 // Open a new data source (into g_disk), and possibly the only project
@@ -252,6 +304,7 @@ static void open_backup(char *type, char *path) {
 		about_box("Invalid backup type specified");
 		return;
 	}
+	close_backup();
 	if (g_fd>=0)
 		close(g_fd);
 #ifdef WIN32
@@ -265,6 +318,7 @@ static void open_backup(char *type, char *path) {
 	}
 	_DBG(_DBG_PRJ, "trying multi-project reader..\n");
 	if (akaiosdisk_read(g_fd, &g_disk)==0) {
+		set_title(path, NULL, NULL);
 		// It's a valid multi-project backup, populate menu
 		// and open first project
 		if (g_disk.dir) {
@@ -275,6 +329,7 @@ static void open_backup(char *type, char *path) {
 				add_multi(e->name);
 				e = e->next;
 			}
+			g_dps = dps;
 			open_project(dps, g_disk.dir->name);
 		} else {
 			about_box("Empty multi-project backup");
@@ -283,6 +338,7 @@ static void open_backup(char *type, char *path) {
 		// It might be a single project backup..
 		_DBG(_DBG_PRJ, "trying single-project reader..\n");
 		lseek64(g_fd, (off64_t)0, SEEK_SET);
+		g_dps = dps;
 		open_project(dps, NULL);
 	}
 }
@@ -364,18 +420,19 @@ static void menu(gpointer d, guint action, GtkWidget *w) {
 		about_box(NULL);
 		break;
 
+	case MID_MULTI:
+		_DBG(_DBG_GUI,"change project: %s\n", (char *)d);
+		open_project(g_dps, (char *)d);
+		break;
+
 	default:
-		if(0 <= action-MID_MULTI < g_disk.dirsize) {
-			_DBG(_DBG_GUI,"change project: %d\n", action-MID_MULTI);
-		} else {
-			_DBG(_DBG_GUI,"unknown action: %d\n", action);
-		}
+		_DBG(_DBG_GUI,"unknown action: %d\n", action);
 		break;
 	}
 }
 
 int main(int argc, char **argv) {
-	char buf[80], *usage =
+	char buf[1024], *usage =
 "usage: deepstripper-gtk [-d[ebug]] [-h[elp]] [-o[utput] <path>]\n"
 "       [-dps12|-dps16 <path>] [-e[xtract] <project>]\n";
 	GtkWidget *vbox, *men, *paned, *note, *frame, *scroll;
@@ -408,6 +465,7 @@ int main(int argc, char **argv) {
 	gtk_box_pack_start(GTK_BOX(vbox), men, FALSE, FALSE, 0);
 	gtk_window_add_accel_group(GTK_WINDOW(g_main), acc);
 	gtk_widget_show(men);
+	g_multi = gtk_item_factory_get_item(fac, "/Multi");
 
 	paned = gtk_hpaned_new();
 	gtk_container_set_border_width(GTK_CONTAINER(paned), 5);
@@ -455,7 +513,7 @@ int main(int argc, char **argv) {
 			if (chdir(argv[++i]))
 				about_box("unable to change directory");
 			else
-				set_title("?", GETCWD(buf, sizeof(buf)), "");
+				set_title(NULL, GETCWD(buf, sizeof(buf)), NULL);
 		} else if (strncmp(argv[i], "-dps", 4)==0) {
 			open_backup(argv[i], argv[i+1]);
 			if (strcmp(argv[i], "-dps12")==0)

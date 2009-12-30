@@ -22,8 +22,8 @@ typedef struct {
 
 int akaiosproject_read(int fd, int type, AkaiOsProject *proj);
 void akaiosproject_clear(AkaiOsProject *proj);
-void akaiosproject_tracks(AkaiOsProject *proj, int (*cb)(char *, void *));
-void akaiosproject_mixes(AkaiOsProject *proj, int (*cb)(char *, void *));
-void akaiosproject_memory(AkaiOsProject *proj, int (*cb)(char *, void *));
+void akaiosproject_tracks(AkaiOsProject *proj, int (*cb)(char *, void *), void *);
+void akaiosproject_mixes(AkaiOsProject *proj, int (*cb)(char *, void *), void *);
+void akaiosproject_memory(AkaiOsProject *proj, int (*cb)(char *, void *), void *);
 
 #endif

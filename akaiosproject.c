@@ -263,3 +263,20 @@ void akaiosproject_clear(AkaiOsProject *proj) {
 	}
 	proj->vtracks = NULL;
 }
+
+void akaiosproject_tracks(AkaiOsProject *proj, int (*cb)(char *trk, void *d), void *d) {
+	if (proj && proj->vtracks) {
+		int i, x=0;
+		for (i=0; !x && i<256; i++) {
+			if (proj->vtracks[i].channel && proj->vtracks[i].segs)
+				x = cb(proj->vtracks[i].name, d);
+		}
+	}
+}
+
+void akaiosproject_mixes(AkaiOsProject *proj, int (*cb)(char *mix, void *d), void *d) {
+}
+
+void akaiosproject_memory(AkaiOsProject *proj, int (*cb)(char *mem, void *d), void *d) {
+}
+
