@@ -25,5 +25,6 @@ void akaiosproject_clear(AkaiOsProject *proj);
 void akaiosproject_tracks(AkaiOsProject *proj, int (*cb)(char *, void *), void *);
 void akaiosproject_mixes(AkaiOsProject *proj, int (*cb)(char *, void *), void *);
 void akaiosproject_memory(AkaiOsProject *proj, int (*cb)(char *, void *), void *);
+AkaiOsVTrack *akaiosproject_track(AkaiOsProject *proj, char *name);
 
 #endif

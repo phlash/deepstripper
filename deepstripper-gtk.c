@@ -78,9 +78,9 @@ static GtkItemFactoryEntry root_menu[] = {
 #define MENU_SIZE	(sizeof(root_menu)/sizeof(GtkItemFactoryEntry))
 
 // Globals
-static char g_src[80];
-static char g_dst[80];
-static char g_prj[80];
+static char g_src[20];
+static char g_dst[20];
+static char g_prj[20];
 static int g_fd = -1;				// current open device/file/source handle
 static int g_dps = -1;				// current open backup type (DPS12/16)
 static AkaiOsDisk g_disk;			// current open disk (if any)
@@ -112,31 +112,79 @@ static gboolean quit(GtkWidget *w, GdkEvent *e, gpointer d) {
 }
 
 // change main window title (and save values)
-void set_title(char *src, char *dst, char *prj) {
-	static char buf[1024];
-	snprintf(buf, sizeof(buf), "DeepStripper (%s->%s) - %s",
-		src?src:g_src, dst?dst:g_dst, prj?prj:g_prj);
-	if (src) strcpy(g_src, src);
-	if (dst) strcpy(g_dst, dst);
-	if (prj) strcpy(g_prj, prj);
-	gtk_window_set_title(GTK_WINDOW(g_main), buf);
-}
-
-// Create a scrollable list box
-static void list_selected_iter(GtkTreeModel *model, GtkTreePath *path,
-								GtkTreeIter *iter, gpointer d) {
-	if ((int)d == TAB_TRACKS) {
-		gchar *trk=NULL;
-		gtk_tree_model_get(model, iter, 0, &trk, -1);
-		_DBG(_DBG_GUI,"selected track: %s\n", trk);
-		g_free(trk);
+void trunc_txt(char *buf, char *txt) {
+	if (strlen(txt)<20) {
+		strcpy(buf, txt);
+	} else {
+		strncpy(buf, txt, 8);
+		strcat(buf, "...");
+		strcat(buf, txt+strlen(txt)-8);
 	}
 }
 
-static void list_selection_changed(GtkTreeSelection *sel, gpointer d) {
-	gtk_tree_selection_selected_foreach(sel, list_selected_iter, d);
+void set_title(char *src, char *dst, char *prj) {
+	static char buf[100];
+
+	if (src) trunc_txt(g_src, src);
+	if (dst) trunc_txt(g_dst, dst);
+	if (prj) trunc_txt(g_prj, prj);
+	snprintf(buf, sizeof(buf), "DeepStripper (%s->%s) - %s", g_src, g_dst, g_prj);
+	gtk_window_set_title(GTK_WINDOW(g_main), buf);
 }
 
+// Set info text
+static void set_info(char *info) {
+	gtk_label_set_label(GTK_LABEL(g_info), info);
+}
+static void add_info(char *info) {
+	gchar buf[1024];
+	const gchar *c = gtk_label_get_label(GTK_LABEL(g_info));
+	if (c) {
+		strncpy(buf, c, sizeof(buf));
+	} else {
+		buf[0] = 0;
+	}
+	strncat(buf, info, sizeof(buf)-strlen(buf));
+	set_info(buf);
+}
+
+// Show track info
+static void add_track_info(AkaiOsVTrack *vt) {
+	gchar buf[160];
+	unsigned int tot=0, rem;
+	AkaiOsSegment *seg = vt->segs;
+	
+	while (seg) {
+		tot += seg->end - seg->start;
+		seg = seg->next;
+	}
+	rem = ((tot % g_proj.splrate) * 1000)/g_proj.splrate;
+	tot /= g_proj.splrate;
+	snprintf(buf, sizeof(buf), "Name: %s\nChannel: %d\nTime: %u:%02u:%02u.%03u\n",
+		vt->name, vt->channel, tot/3600, (tot/60)%60, tot%60, rem);
+	add_info(buf);
+}
+
+// iterate selected items, update info pane
+static void list_selected_iter(GtkTreeModel *model, GtkTreePath *path,
+								GtkTreeIter *iter, gpointer d) {
+	gchar *trk=NULL;
+	AkaiOsVTrack *vt=NULL;
+	gtk_tree_model_get(model, iter, 0, &trk, -1);
+	vt = akaiosproject_track(&g_proj, trk);
+	if (vt)
+		add_track_info(vt);
+	g_free(trk);
+}
+
+static void list_selection_changed(GtkTreeSelection *sel, gpointer d) {
+	if ((int)d == TAB_TRACKS) {
+		set_info("");
+		gtk_tree_selection_selected_foreach(sel, list_selected_iter, d);
+	}
+}
+
+// Create a scrollable list box
 static GtkWidget *make_list(char *data, gint idx) {
 	GtkWidget *scroll, *tree, *list;
 	GtkListStore *model;
@@ -212,11 +260,6 @@ static void add_multi(char *name) {
 		gtk_menu_append(GTK_MENU(sub), item);
 //		_DBG(_DBG_GUI, "append g_multi->sub, %s\n", name);
 	}
-}
-
-// Set info text
-static void set_info(char *info) {
-	gtk_label_set_label(GTK_LABEL(g_info), info);
 }
 
 // Show project info

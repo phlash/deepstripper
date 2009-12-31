@@ -280,3 +280,11 @@ void akaiosproject_mixes(AkaiOsProject *proj, int (*cb)(char *mix, void *d), voi
 void akaiosproject_memory(AkaiOsProject *proj, int (*cb)(char *mem, void *d), void *d) {
 }
 
+AkaiOsVTrack *akaiosproject_track(AkaiOsProject *proj, char *name) {
+	int i;
+	for (i=0; proj && proj->vtracks && i<256; i++) {
+		if (!strcmp(proj->vtracks[i].name, name))
+			return &proj->vtracks[i];
+	}
+	return NULL;
+}
