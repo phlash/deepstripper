@@ -1,5 +1,5 @@
-LIN_FLAGS=$(shell pkg-config --cflags gtk+-2.0)
-LIN_LIBS=$(shell pkg-config --libs gtk+-2.0)
+LIN_FLAGS=$(shell pkg-config --cflags gtk+-2.0) -g
+LIN_LIBS=$(shell pkg-config --libs gtk+-2.0) -g
 
 WIN_FLAGS=-mms-bitfields
 WIN_LIBS=$(shell PKG_CONFIG_PATH=/usr/i586-mingw32msvc/lib/pkgconfig pkg-config --libs-only-l gtk+-win32-2.0)

@@ -29,3 +29,21 @@ unsigned short h2bes(unsigned short h) {
 	p[1] = (unsigned char)h;
 	return r;
 }
+
+unsigned int h2lel(unsigned int h) {
+	unsigned int r;
+	unsigned char *p = (unsigned char *)&r;
+	p[0] = (unsigned char)h;
+	p[1] = (unsigned char)(h>>8);
+	p[2] = (unsigned char)(h>>16);
+	p[3] = (unsigned char)(h>>24);
+	return r;
+}
+
+unsigned short h2les(unsigned short h) {
+	unsigned short r;
+	unsigned char *p = (unsigned char *)&r;
+	p[0] = (unsigned char)h;
+	p[1] = (unsigned char)(h>>8);
+	return r;
+}

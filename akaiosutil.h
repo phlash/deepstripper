@@ -7,5 +7,7 @@ unsigned int be2hl(unsigned int b);
 unsigned short be2hs(unsigned short b);
 unsigned int h2bel(unsigned int h);
 unsigned short h2bes(unsigned short h);
+unsigned int h2lel(unsigned int h);
+unsigned short h2les(unsigned short h);
 
 #endif

@@ -17,9 +17,11 @@
 #include <io.h>
 #include <fcntl.h>
 #include <share.h>
+#include <malloc.h>
 #else
 #include <unistd.h>
 #include <fcntl.h>
+#include <stdlib.h>
 #define GETCWD	getcwd
 #endif
 #include "deepstripper.h"
@@ -85,9 +87,11 @@ static int g_fd = -1;				// current open device/file/source handle
 static int g_dps = -1;				// current open backup type (DPS12/16)
 static AkaiOsDisk g_disk;			// current open disk (if any)
 static AkaiOsProject g_proj;		// current open project (if any)
+static off64_t g_poff;				// current project disk offset (if any)
 static GtkWidget *g_main;			// main window, useful for dialogs etc.
 static GtkWidget *g_info;			// information window, updated everywhere
 static GtkWidget *g_multi;			// multi-project menu handle, updated by new data
+static GtkWidget *g_stat;			// status bar
 
 // Notebook tabs
 #define TAB_TRACKS	0
@@ -103,6 +107,7 @@ static struct {
 	{ "Mem", "Memory Locations:" }
 };
 static GtkListStore *g_data[N_TABS];// Tracks, Mixes, Memory (see above)
+static GtkTreeSelection *g_sels[N_TABS];//Selection objects for above
 
 // Bail out..
 static gboolean quit(GtkWidget *w, GdkEvent *e, gpointer d) {
@@ -146,6 +151,15 @@ static void add_info(char *info) {
 	}
 	strncat(buf, info, sizeof(buf)-strlen(buf));
 	set_info(buf);
+}
+
+// Set status bar text
+static void set_status(char *msg) {
+	static guint ctx = -1;
+	if (ctx == -1)
+		ctx = gtk_statusbar_get_context_id(GTK_STATUSBAR(g_stat), "dps");
+	gtk_statusbar_pop(GTK_STATUSBAR(g_stat), ctx);
+	gtk_statusbar_push(GTK_STATUSBAR(g_stat), ctx, msg);
 }
 
 // Show track info
@@ -199,16 +213,14 @@ static GtkWidget *make_list(char *data, gint idx) {
 	g_data[idx] = gtk_list_store_new(1, G_TYPE_STRING);
 
 	tree = gtk_tree_view_new();
-	gtk_tree_selection_set_mode(
-		gtk_tree_view_get_selection(GTK_TREE_VIEW(tree)),
-		(GTK_SELECTION_MULTIPLE));
+	g_sels[idx] = gtk_tree_view_get_selection(GTK_TREE_VIEW(tree));
+	gtk_tree_selection_set_mode(g_sels[idx], (GTK_SELECTION_MULTIPLE));
 	gtk_tree_view_set_model(GTK_TREE_VIEW(tree), GTK_TREE_MODEL(g_data[idx]));
 	gtk_container_add(GTK_CONTAINER(scroll), tree);
 	cell = gtk_cell_renderer_text_new();
 	col = gtk_tree_view_column_new_with_attributes(data, cell, "text", 0, NULL);
 	gtk_tree_view_append_column(GTK_TREE_VIEW(tree), col);
-	g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(tree)),
-		 "changed", G_CALLBACK(list_selection_changed), (gpointer)idx);
+	g_signal_connect(g_sels[idx], "changed", G_CALLBACK(list_selection_changed), (gpointer)idx);
 	gtk_widget_show(tree);
 
 	return scroll;
@@ -264,10 +276,10 @@ static void add_multi(char *name) {
 
 // Show project info
 static void show_project_info() {
-	char msg[80];
+	char msg[160];
 	if (g_proj.offset) {
-		sprintf(msg, "Name: %s\nSample rate: %d\nSample size: %d\nDef Scene: %s",
-			g_proj.name, g_proj.splrate, g_proj.splsize, g_proj.defscene.name);
+		sprintf(msg, "Name: %s\nSample rate: %d\nSample size: %d\nDef Scene: %s\nOffset: 0x%llX",
+			g_proj.name, g_proj.splrate, g_proj.splsize, g_proj.defscene.name, g_poff);
 		set_info(msg);
 	}
 }
@@ -302,12 +314,12 @@ static void open_project(int type, char *name) {
 	}
 	close_project();
 	if (name) {
-		off64_t off = akaiosdisk_project(&g_disk, name);
-		if (!off) {
+		g_poff = akaiosdisk_project(&g_disk, name);
+		if (!g_poff) {
 			about_box("Specified project does not exist");
 			return;
 		}
-		if (lseek64(g_fd, off, SEEK_SET)==(off64_t)-1) {
+		if (lseek64(g_fd, g_poff, SEEK_SET)==(off64_t)-1) {
 			about_box("Unable to seek to specified project");
 			return;
 		}
@@ -386,14 +398,152 @@ static void open_backup(char *type, char *path) {
 	}
 }
 
-// Select non-empty tracks
-static void select_non_empty() {
-	// XXX:TODO
+// Select specified tracks
+static void select_tracks(int type) {
+	switch (type) {
+	case MID_SELALL:
+		gtk_tree_selection_select_all(g_sels[TAB_TRACKS]);
+		break;
+	case MID_SELNONE:
+		gtk_tree_selection_unselect_all(g_sels[TAB_TRACKS]);
+		break;
+	default:
+		about_box("Sorry - not implemented");
+		return;
+	}
 }
 
 // Extract selected tracks
+  // XXXX:TODO:FIXME: .WAV file header, hard coded for 16-bit 44kHz, 1 channel
+static void write_wav(int fd, unsigned int len) {
+	unsigned int ul = len + 36;
+	unsigned short us;
+	ul = h2lel(ul);
+	write(fd, "RIFF", 4);
+	write(fd, &ul, 4);
+	write(fd, "WAVE", 4);
+	write(fd, "fmt ", 4);
+	ul = h2lel(16);
+	us = h2les(1);
+	write(fd, &ul, 4);
+	write(fd, &us, 2);
+	write(fd, &us, 2);
+	ul = h2lel(44100);
+	write(fd, &ul, 4);
+	ul = h2lel(88200);
+	write(fd, &ul, 4);
+	us = h2les(2);
+	write(fd, &us, 2);
+	us = h2les(16);
+	write(fd, &us, 2);
+	write(fd, "data", 4);
+	ul = h2lel(len);
+	write(fd, &ul, 4);
+}
+static void update_prog(GtkProgressBar *prog, gdouble frac) {
+	gtk_progress_bar_set_fraction(prog, frac);
+	while (gtk_events_pending())
+		gtk_main_iteration();
+}
+static void extract_track(AkaiOsVTrack *vt, gchar *trk, GtkProgressBar *prog) {
+	// Add up the segment size
+	unsigned int end=0, p=0, fs=0, chk=0x40000;
+	int fd;
+	char path[80], *buf;
+	AkaiOsSegment *seg = vt->segs;
+	
+	while (seg) {
+		end = seg->end;
+		seg = seg->next;
+	}
+	// Skip empty tracks
+	if (!end)
+		return;
+	// Write WAV header
+	sprintf(path, "%s.wav", trk);
+	_DBG(_DBG_PRJ, "opening output file: %s\n", path);
+#ifdef WIN32
+	fd = _sopen(path, _O_RDWR | _O_BINARY | _O_CREAT, _SH_DENYNO, 0666);
+#else
+	fd = open(path, O_RDWR | O_CREAT | O_LARGEFILE, 0666);
+#endif
+	if (fd<0) {
+		about_box("Unable to open track file");
+		return;
+	}
+	write_wav(fd, 0);
+	// Read data and write from time zero to end of track
+	buf = malloc(chk);
+	if (!buf) {
+		about_box("out of memory!");
+		return;
+	}
+	_DBG(_DBG_PRJ, "writing output file\n");
+	seg = vt->segs;
+	while (seg) {
+		// seek to segment
+		off64_t off = g_poff + seg->offset;
+		if (lseek64(g_fd, off, SEEK_SET)==(off64_t)-1) {
+			about_box("unable to seek to segment data");
+			goto bail;
+		}
+		// fill blanks (if any)
+		while (p<seg->start) {
+			unsigned int i, n = (seg->start-p)*g_proj.splbyte;
+			if (n>chk) n=chk;
+			fs += n;
+			for (i=0; i<n; i++)
+				buf[i]=0;
+			write(fd, buf, n);
+			p += n/g_proj.splbyte;
+			update_prog(prog, (gdouble)p/(gdouble)end);
+		}
+		// copy segment (chunked)
+		while(p<seg->end) {
+			unsigned int i, n = (seg->end-p)*g_proj.splbyte;
+			if (n>chk) n=chk;
+			fs += n;
+			if (read(g_fd, buf, n)!=n) {
+				about_box("unable to read segment data");
+				goto bail;
+			}
+			write(fd, buf, n);
+			p += n/g_proj.splbyte;
+			update_prog(prog, (gdouble)p/(gdouble)end);
+		}
+		seg = seg->next;
+		_DBG(_DBG_BLK, "  segment done\n");
+	}
+	_DBG(_DBG_PRJ, "file done\n");
+bail:
+	free(buf);
+	// Re-write WAV header with correct file size
+	lseek64(fd, (off64_t)0, SEEK_SET);
+	write_wav(fd, fs);
+	close(fd);
+}
+static void extract_selected_iter(GtkTreeModel *model, GtkTreePath *path,
+								GtkTreeIter *iter, gpointer d) {
+	GtkProgressBar *prog=GTK_PROGRESS_BAR(d);
+	gchar *trk=NULL;
+	AkaiOsVTrack *vt=NULL;
+	gtk_tree_model_get(model, iter, 0, &trk, -1);
+	_DBG(_DBG_GUI,"extracting track: %s\n", trk);
+	gtk_progress_bar_set_text(prog, trk);
+	gtk_progress_bar_set_fraction(prog, 0.0);
+	vt = akaiosproject_track(&g_proj, trk);
+	if (vt)
+		extract_track(vt, trk, prog);
+	g_free(trk);
+}
 static void extract_tracks() {
-	// XXX:TODO
+	GtkWidget *prog = gtk_progress_bar_new();
+	gtk_box_pack_end(GTK_BOX(g_stat), prog, TRUE, TRUE, 0);
+	gtk_widget_show(prog);
+	set_status("extracting..");
+	gtk_tree_selection_selected_foreach(g_sels[TAB_TRACKS], extract_selected_iter, prog);
+	gtk_widget_destroy(prog); // NB: automatically removed from container
+	set_status("done!");
 }
 
 // File selection dialog..
@@ -444,18 +594,26 @@ static void menu(gpointer d, guint action, GtkWidget *w) {
 
 	case MID_SELASS:
 		_DBG(_DBG_GUI,"select assigned\n");
+		select_tracks(action);
 		break;
 	case MID_SELNOE:
 		_DBG(_DBG_GUI,"select non-empty\n");
+		select_tracks(action);
 		break;
 	case MID_SELALL:
 		_DBG(_DBG_GUI,"select all\n");
+		select_tracks(action);
 		break;
 	case MID_SELNONE:
 		_DBG(_DBG_GUI,"select none\n");
+		select_tracks(action);
 		break;
 	case MID_SELEXP:
 		_DBG(_DBG_GUI,"export selected\n");
+		if (g_proj.splbyte==2)
+			extract_tracks();
+		else
+			about_box("FIXME: only 16-bit data can be exported");
 		break;
 
 	case MID_HELP:
@@ -484,7 +642,7 @@ int main(int argc, char **argv) {
 	int i, dps = -1;
 
 	for (i=1; i<argc; i++) {
-		if (strncmp(argv[i], "-d", 2)==0) {
+		if (strcmp(argv[i], "-d")==0) {
 			g_dbg = g_dbg<<1 | 1;
 		} else if (strncmp(argv[i], "-h", 2)==0) {
 			g_print(usage);
@@ -547,6 +705,11 @@ int main(int argc, char **argv) {
 	gtk_scrolled_window_add_with_viewport(GTK_SCROLLED_WINDOW(scroll), g_info);
 	gtk_widget_show(g_info);
 
+	g_stat = gtk_statusbar_new();
+	gtk_box_pack_end(GTK_BOX(vbox), g_stat, FALSE, FALSE, 0);
+	gtk_widget_show(g_stat);
+	set_status("status");
+	
 // Display everything
 	gtk_widget_show(g_main);
 
@@ -569,7 +732,7 @@ int main(int argc, char **argv) {
 				about_box("No backup specified to extract from");
 			else {
 				open_project(dps, argv[++i]);
-				select_non_empty();
+				select_tracks(MID_SELNOE);
 				extract_tracks();
 			}
 		} else if (strncmp(argv[i], "-d", 2)==0 ||
