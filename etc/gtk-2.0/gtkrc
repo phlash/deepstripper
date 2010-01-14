@@ -1,0 +1,8 @@
+/* tiny font size to try and work round wine bug */
+
+style "font"
+{
+	font_name="Arial 0.1"
+}
+widget_class "*" style "font"
+gtk-font-name="Arial 0.1"

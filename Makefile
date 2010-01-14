@@ -1,3 +1,4 @@
+RELEASE=0.1
 LIN_FLAGS=$(shell pkg-config --cflags gtk+-2.0) -g
 LIN_LIBS=$(shell pkg-config --libs gtk+-2.0) -g
 
@@ -11,6 +12,11 @@ all: lin win
 lin: $(LINOUT) $(LINOUT)/deepstripper-gtk
 win: $(WINOUT) $(WINOUT)/deepstripper.exe
 
+winpkg: win
+	cp $(WINOUT)/deepstripper.exe .
+	zip -ru $(WINOUT)/deepstripper-$(RELEASE).zip deepstripper.exe *.dll etc share
+	rm deepstripper.exe
+
 $(LINOUT):
 	mkdir $(LINOUT)
 
@@ -18,11 +24,11 @@ $(WINOUT):
 	mkdir $(WINOUT)
 
 $(LINOUT)/deepstripper-gtk: CC=gcc
-$(LINOUT)/deepstripper-gtk: CFLAGS=$(LIN_FLAGS)
+$(LINOUT)/deepstripper-gtk: CFLAGS=$(LIN_FLAGS) -DRELEASE=\"$(RELEASE)\"
 $(LINOUT)/deepstripper-gtk: LIBS=$(LIN_LIBS)
 
 $(WINOUT)/deepstripper.exe: CC=i586-mingw32msvc-gcc
-$(WINOUT)/deepstripper.exe: CFLAGS=$(WIN_FLAGS)
+$(WINOUT)/deepstripper.exe: CFLAGS=$(WIN_FLAGS) -DRELEASE=\"$(RELEASE)\"
 $(WINOUT)/deepstripper.exe: LIBS=$(WIN_LIBS)
 
 clean:

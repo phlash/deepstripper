@@ -32,9 +32,10 @@
 int g_dbg = 0;
 
 // Text for about box
-#define DS_VER_MAJOR	0
-#define DS_VER_MINOR	1
-#define ABOUT_TEXT "DeepStripper/GTK version %d.%d\nAuthor: Phil Ashby, phil.yahoo@ashbysoft.com\nEnjoy!"
+#ifndef RELEASE
+#error Must define RELEASE
+#endif
+#define ABOUT_TEXT "DeepStripper/GTK version %s\nAuthor: Phil Ashby, phil.yahoo@ashbysoft.com\nEnjoy!"
 
 // Default text for info box
 #define DEFAULT_INFO	"Open a project.."
@@ -236,7 +237,7 @@ static void about_box(char *msg) {
 	} else {
 		about = gtk_message_dialog_new(GTK_WINDOW(g_main),
 		GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_INFO, GTK_BUTTONS_OK,
-		ABOUT_TEXT, DS_VER_MAJOR, DS_VER_MINOR);
+		ABOUT_TEXT, RELEASE);
 	}
 	gtk_dialog_run(GTK_DIALOG(about));
 	gtk_widget_destroy(about);
