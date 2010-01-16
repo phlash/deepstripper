@@ -59,6 +59,7 @@ static void menu(gpointer d, guint action, GtkWidget *w);
 #define MID_MULTI	300
 
 #define MID_HELP	999
+#define MID_VERSION	1000
 
 // Menu definition
 static GtkItemFactoryEntry root_menu[] = {
@@ -76,7 +77,8 @@ static GtkItemFactoryEntry root_menu[] = {
 	{ "/_Track/Select _None", "<CTRL>z", menu, MID_SELNONE, NULL },
 	{ "/_Track/E_xport...", "<CTRL>s", menu, MID_SELEXP, NULL },
 	{ "/_Help", "", NULL, 0, "<LastBranch>" },
-	{ "/_Help/_About", "<CTRL>h", menu, MID_HELP, NULL }
+	{ "/_Help/_About", "<CTRL>h", menu, MID_HELP, NULL },
+	{ "/Help/_Versions", "<CTRL>v", menu, MID_VERSION, NULL }
 };
 #define MENU_SIZE	(sizeof(root_menu)/sizeof(GtkItemFactoryEntry))
 
@@ -620,6 +622,16 @@ static void menu(gpointer d, guint action, GtkWidget *w) {
 	case MID_HELP:
 		_DBG(_DBG_GUI,"help about\n");
 		about_box(NULL);
+		break;
+	case MID_VERSION:
+		_DBG(_DBG_GUI,"help versions\n");
+		{
+			char buf[256];
+			sprintf(buf, "deepstripper-gtk: %s\ngtk-build: %d.%d.%d\ngtk-runtime: %d.%d.%d",
+				RELEASE, GTK_MAJOR_VERSION, GTK_MINOR_VERSION, GTK_MICRO_VERSION,
+				gtk_major_version, gtk_minor_version, gtk_micro_version);
+			about_box(buf);
+		}
 		break;
 
 	case MID_MULTI:

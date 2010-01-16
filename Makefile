@@ -13,6 +13,9 @@ all: lin win
 lin: $(LINOUT) $(LINOUT)/deepstripper-gtk
 win: $(WINOUT) $(WINOUT)/deepstripper.exe
 
+archive:
+	git archive --format=tar --prefix=deepstripper-gtk-$(RELEASE)/ HEAD |gzip -c >../deepstripper-gtk-$(RELEASE).tgz
+
 linpkg: lin
 	mkdir -p $(LINPKG)/DEBIAN
 	cp control $(LINPKG)/DEBIAN
