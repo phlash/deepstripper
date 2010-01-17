@@ -6,7 +6,7 @@ WIN_FLAGS=-mms-bitfields
 WIN_LIBS=$(shell PKG_CONFIG_PATH=/usr/i586-mingw32msvc/lib/pkgconfig pkg-config --libs-only-l gtk+-win32-2.0)
 
 LINOUT=linux
-LINPKG=deepstripper-gtk-0.1
+LINPKG=deepstripper-gtk-$(RELEASE)
 WINOUT=win32
 
 all: lin win
