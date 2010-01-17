@@ -1,6 +1,7 @@
 /* AKAI OS backup reader for individual projects */
 
 #define _LARGEFILE64_SOURCE
+#include <stdio.h>
 #include <string.h>
 #ifdef WIN32
 #include <io.h>
@@ -35,7 +36,7 @@
 
 // Convenience macro to calculate next segment data offset from sample count and size
 #define aosp_next(proj, cnt, off) {\
-	off += (cnt*proj->splbyte); \
+	off += ((cnt)*(proj)->splbyte); \
 	if (off & 0xffff) off = (off&0xffff0000)+0x10000; \
 }
 
@@ -49,7 +50,7 @@ static int aosp_add_seg(AkaiOsProject *proj, int vt,
 		return -1;
 	seg->start = start;
 	seg->end = end;
-	seg->offset = off + proj->offset;
+	seg->offset = off;
 	seg->next = proj->vtracks[vt].segs;
 	proj->vtracks[vt].segs = seg;
 	_DBG(_DBG_INT, "aosp: seg added: VT=%d, %08x->%08x @ %08x\n",
@@ -209,12 +210,14 @@ int akaiosproject_read(int fd, int type, AkaiOsProject *proj) {
 		switch(opvt>>8) {
 		case 0:
 			// add segment to specified vtrack at currently calculated data offset
+			_DBG(_DBG_INT,"aosp: segofs1=%d\n", coff);
 			aosp_add_seg(proj, opvt & 0xff, start, end, coff);
 			// reset goto offset, save coff
 			goff = 0;
 			poff = coff;
 			// calculate next block, round up to 64k
 			aosp_next(proj, end-start, coff);
+			_DBG(_DBG_INT,"aosp: segofs2=%d\n", coff);
 			break;
 
 		case 2:
@@ -264,7 +267,7 @@ void akaiosproject_clear(AkaiOsProject *proj) {
 	proj->vtracks = NULL;
 }
 
-void akaiosproject_tracks(AkaiOsProject *proj, int (*cb)(char *trk, void *d), void *d) {
+void akaiosproject_tracks(AkaiOsProject *proj, int (*cb)(char *, void *), void *d) {
 	if (proj && proj->vtracks) {
 		int i, x=0;
 		for (i=0; !x && i<256; i++) {
@@ -274,10 +277,10 @@ void akaiosproject_tracks(AkaiOsProject *proj, int (*cb)(char *trk, void *d), vo
 	}
 }
 
-void akaiosproject_mixes(AkaiOsProject *proj, int (*cb)(char *mix, void *d), void *d) {
+void akaiosproject_mixes(AkaiOsProject *proj, int (*cb)(char *, void *), void *d) {
 }
 
-void akaiosproject_memory(AkaiOsProject *proj, int (*cb)(char *mem, void *d), void *d) {
+void akaiosproject_memory(AkaiOsProject *proj, int (*cb)(char *, void *), void *d) {
 }
 
 AkaiOsVTrack *akaiosproject_track(AkaiOsProject *proj, char *name) {
@@ -287,4 +290,72 @@ AkaiOsVTrack *akaiosproject_track(AkaiOsProject *proj, char *name) {
 			return &proj->vtracks[i];
 	}
 	return NULL;
+}
+
+unsigned int akaiosproject_extract(AkaiOsProject *proj, char *name, int fdin, int fdout,
+	int (*cb)(double, void *), void *d) {
+	AkaiOsVTrack *vt = akaiosproject_track(proj, name);
+	off64_t poff = lseek64(fdin, 0, SEEK_CUR);
+	unsigned int end=0, p=0, fs=0, chk=0x40000;
+	AkaiOsSegment *seg;
+	char *buf;
+
+	// Skip empty track
+	if (!vt) {
+		_DBG(_DBG_PRJ, "aosp: missing track: %s\n", name);
+		return 0;
+	}
+	// Read data and write from time zero to end of track
+	buf = malloc(chk);
+	if (!buf) {
+		_DBG(_DBG_PRJ, "aosp: out of memory!\n");
+		return 0;
+	}
+	_DBG(_DBG_INT,"aosp: data ofs: 0x%08x%08x, segofs=0x%08x\n",
+		(int)(poff>>32), (int)poff, proj->offset);
+
+	seg = vt->segs;
+	while (seg) {
+		end = seg->end;
+		seg = seg->next;
+	}
+	seg = vt->segs;
+	while (seg) {
+		// calculate offset and seek to segment
+		off64_t off = poff + proj->offset + seg->offset;
+		_DBG(_DBG_INT, "aosp: seg %d -> %d @ %08x%08x\n", seg->start, seg->end, (int)(off>>32), (int)off);
+		if (lseek64(fdin, off, SEEK_SET)==(off64_t)-1) {
+			_DBG(_DBG_BLK,"aosp: unable to seek to segment data\n");
+			goto bail;
+		}
+		// fill blanks (if any)
+		while (p<seg->start) {
+			unsigned int i, n = (seg->start-p)*proj->splbyte;
+			if (n>chk) n=chk;
+			fs += n;
+			for (i=0; i<n; i++)
+				buf[i]=0;
+			write(fdout, buf, n);
+			p += n/proj->splbyte;
+			if (cb) cb((double)p/(double)end, d);
+		}
+		// copy segment (chunked)
+		while(p<seg->end) {
+			unsigned int i, n = (seg->end-p)*proj->splbyte;
+			if (n>chk) n=chk;
+			fs += n;
+			if (read(fdin, buf, n)!=n) {
+				_DBG(_DBG_BLK,"aosp: unable to read segment data\n");
+				goto bail;
+			}
+			write(fdout, buf, n);
+			p += n/proj->splbyte;
+			if (cb) cb((double)p/(double)end, d);
+		}
+		_DBG(_DBG_INT, "aosp: seg done: %d->%d\n", seg->start, seg->end);
+		seg = seg->next;
+	}
+bail:
+	free(buf);
+	return fs;
 }

@@ -443,26 +443,19 @@ static void write_wav(int fd, unsigned int len) {
 	ul = h2lel(len);
 	write(fd, &ul, 4);
 }
-static void update_prog(GtkProgressBar *prog, gdouble frac) {
+static int update_prog(double frac, void *p) {
+	GtkProgressBar *prog = (GtkProgressBar *)p;
 	gtk_progress_bar_set_fraction(prog, frac);
 	while (gtk_events_pending())
 		gtk_main_iteration();
+	return 0;
 }
-static void extract_track(AkaiOsVTrack *vt, gchar *trk, GtkProgressBar *prog) {
-	// Add up the segment size
-	unsigned int end=0, p=0, fs=0, chk=0x40000;
+static void extract_track(gchar *trk, GtkProgressBar *prog) {
 	int fd;
-	char path[80], *buf;
-	AkaiOsSegment *seg = vt->segs;
-	
-	while (seg) {
-		end = seg->end;
-		seg = seg->next;
-	}
-	// Skip empty tracks
-	if (!end)
-		return;
-	// Write WAV header
+	unsigned int fs;
+	char path[80];
+
+	// Open output file
 	sprintf(path, "%s.wav", trk);
 	_DBG(_DBG_PRJ, "opening output file: %s\n", path);
 #ifdef WIN32
@@ -474,56 +467,24 @@ static void extract_track(AkaiOsVTrack *vt, gchar *trk, GtkProgressBar *prog) {
 		about_box("Unable to open track file");
 		return;
 	}
-	write_wav(fd, 0);
-	// Read data and write from time zero to end of track
-	buf = malloc(chk);
-	if (!buf) {
-		about_box("out of memory!");
-		return;
-	}
+	// Write WAV header
 	_DBG(_DBG_PRJ, "writing output file\n");
-	seg = vt->segs;
-	while (seg) {
-		// seek to segment
-		off64_t off = g_poff + seg->offset;
-		if (lseek64(g_fd, off, SEEK_SET)==(off64_t)-1) {
-			about_box("unable to seek to segment data");
-			goto bail;
-		}
-		// fill blanks (if any)
-		while (p<seg->start) {
-			unsigned int i, n = (seg->start-p)*g_proj.splbyte;
-			if (n>chk) n=chk;
-			fs += n;
-			for (i=0; i<n; i++)
-				buf[i]=0;
-			write(fd, buf, n);
-			p += n/g_proj.splbyte;
-			update_prog(prog, (gdouble)p/(gdouble)end);
-		}
-		// copy segment (chunked)
-		while(p<seg->end) {
-			unsigned int i, n = (seg->end-p)*g_proj.splbyte;
-			if (n>chk) n=chk;
-			fs += n;
-			if (read(g_fd, buf, n)!=n) {
-				about_box("unable to read segment data");
-				goto bail;
-			}
-			write(fd, buf, n);
-			p += n/g_proj.splbyte;
-			update_prog(prog, (gdouble)p/(gdouble)end);
-		}
-		seg = seg->next;
-		_DBG(_DBG_BLK, "  segment done\n");
+	write_wav(fd, 0);
+	// Write samples
+	lseek64(g_fd, g_poff, SEEK_SET);
+	fs = akaiosproject_extract(&g_proj, trk, g_fd, fd, update_prog, prog);
+	// Check for empty file
+	if (!fs) {
+		close(fd);
+		remove(path);
+		_DBG(_DBG_PRJ, "removed empty file: %s\n", path);
+	} else {
+		// Re-write WAV header with correct file size
+		lseek64(fd, (off64_t)0, SEEK_SET);
+		write_wav(fd, fs);
+		close(fd);
+		_DBG(_DBG_PRJ, "file done\n");
 	}
-	_DBG(_DBG_PRJ, "file done\n");
-bail:
-	free(buf);
-	// Re-write WAV header with correct file size
-	lseek64(fd, (off64_t)0, SEEK_SET);
-	write_wav(fd, fs);
-	close(fd);
 }
 static void extract_selected_iter(GtkTreeModel *model, GtkTreePath *path,
 								GtkTreeIter *iter, gpointer d) {
@@ -534,9 +495,7 @@ static void extract_selected_iter(GtkTreeModel *model, GtkTreePath *path,
 	_DBG(_DBG_GUI,"extracting track: %s\n", trk);
 	gtk_progress_bar_set_text(prog, trk);
 	gtk_progress_bar_set_fraction(prog, 0.0);
-	vt = akaiosproject_track(&g_proj, trk);
-	if (vt)
-		extract_track(vt, trk, prog);
+	extract_track(trk, prog);
 	g_free(trk);
 }
 static void extract_tracks() {

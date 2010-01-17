@@ -5,7 +5,7 @@
 typedef struct _aoss_seg {
 	unsigned int start;	// segment start (sample offset)
 	unsigned int end;		// segment end (sample offset)
-	unsigned int offset;	// segment data offset (bytes) from project start
+	unsigned int offset;	// segment data offset (bytes) from seg data start
 	struct _aoss_seg *next;	// chain of segments
 } AkaiOsSegment;
 

@@ -7,7 +7,7 @@
 #include "akaiosvtrack.h"
 
 typedef struct {
-	unsigned short offset;	// segment data offset (bytes) from header start
+	unsigned short offset;	// segment data offset (bytes) from project start
 	unsigned short scnlen;	// length of additional scene data (bytes)
 	int splrate;			// sample rate (sample/sec)
 	int splsize;			// sample size (bits)
@@ -26,5 +26,7 @@ void akaiosproject_tracks(AkaiOsProject *proj, int (*cb)(char *, void *), void *
 void akaiosproject_mixes(AkaiOsProject *proj, int (*cb)(char *, void *), void *);
 void akaiosproject_memory(AkaiOsProject *proj, int (*cb)(char *, void *), void *);
 AkaiOsVTrack *akaiosproject_track(AkaiOsProject *proj, char *name);
+unsigned int akaiosproject_extract(AkaiOsProject *proj, char *name, int fdin, int fdout,
+	int (*cb)(double, void *), void *);
 
 #endif
