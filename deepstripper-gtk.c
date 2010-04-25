@@ -260,10 +260,10 @@ static void multi_menu(GtkMenuItem *item, gpointer d) {
 	menu(d, MID_MULTI, GTK_WIDGET(item));
 }
 
-static void add_multi(char *name) {
+static void add_multi(AkaiOsDisk_Dirent *dent) {
 	if (g_multi) {
 		GtkWidget *sub = gtk_menu_item_get_submenu(GTK_MENU_ITEM(g_multi));
-		GtkWidget *item = gtk_menu_item_new_with_label(name);
+		GtkWidget *item = gtk_menu_item_new_with_label(dent->name);
 		gtk_widget_show(item);
 		if (!sub) {
 			sub = gtk_menu_new();
@@ -271,7 +271,7 @@ static void add_multi(char *name) {
 			gtk_menu_item_set_submenu(GTK_MENU_ITEM(g_multi), sub);
 			_DBG(_DBG_GUI, "new g_multi->sub\n");
 		}
-		g_signal_connect(item, "activate", G_CALLBACK(multi_menu), (gpointer)name);
+		g_signal_connect(item, "activate", G_CALLBACK(multi_menu), (gpointer)dent);
 		gtk_menu_append(GTK_MENU(sub), item);
 //		_DBG(_DBG_GUI, "append g_multi->sub, %s\n", name);
 	}
@@ -281,7 +281,7 @@ static void add_multi(char *name) {
 static void show_project_info() {
 	char msg[160];
 	if (g_proj.offset) {
-		sprintf(msg, "Name: %s\nSample rate: %d\nSample size: %d\nDef Scene: %s\nOffset: 0x%llX",
+		sprintf(msg, "Name: %s\nSample rate: %d\nSample size: %d\nDef Scene: %s\nOffset: 0x%08llX",
 			g_proj.name, g_proj.splrate, g_proj.splsize, g_proj.defscene.name, g_poff);
 		set_info(msg);
 	}
@@ -310,14 +310,14 @@ static void close_project() {
 }
 
 // Open a specific project or entire backup (into g_proj)
-static void open_project(int type, char *name) {
+static void open_project(int type, AkaiOsDisk_Dirent *dent) {
 	if (g_fd<0) {
 		about_box("Attempting to open a project without opening a backup");
 		return;
 	}
 	close_project();
-	if (name) {
-		g_poff = akaiosdisk_project(&g_disk, name);
+	if (dent) {
+		g_poff = akaiosdisk_project_bydent(dent);
 		if (!g_poff) {
 			about_box("Specified project does not exist");
 			return;
@@ -331,7 +331,7 @@ static void open_project(int type, char *name) {
 		about_box("Unable to read project");
 		return;
 	}
-	set_title(NULL, NULL, name);
+	set_title(NULL, NULL, g_proj.name);
 	akaiosproject_tracks(&g_proj, add_to_list, (void *)TAB_TRACKS);
 	akaiosproject_mixes(&g_proj, add_to_list, (void *)TAB_TRACKS);
 	akaiosproject_memory(&g_proj, add_to_list, (void *)TAB_TRACKS);
@@ -384,11 +384,11 @@ static void open_backup(char *type, char *path) {
 			AkaiOsDisk_Dirent *e = g_disk.dir;
 			clear_multi();
 			while(e) {
-				add_multi(e->name);
+				add_multi(e);
 				e = e->next;
 			}
 			g_dps = dps;
-			open_project(dps, g_disk.dir->name);
+			open_project(dps, g_disk.dir);
 		} else {
 			about_box("Empty multi-project backup");
 		}
@@ -594,8 +594,8 @@ static void menu(gpointer d, guint action, GtkWidget *w) {
 		break;
 
 	case MID_MULTI:
-		_DBG(_DBG_GUI,"change project: %s\n", (char *)d);
-		open_project(g_dps, (char *)d);
+		_DBG(_DBG_GUI,"change project: %s\n", ((AkaiOsDisk_Dirent *)d)->name);
+		open_project(g_dps, (AkaiOsDisk_Dirent *)d);
 		break;
 
 	default:
@@ -703,7 +703,7 @@ int main(int argc, char **argv) {
 			if (dps<0)
 				about_box("No backup specified to extract from");
 			else {
-				open_project(dps, argv[++i]);
+				open_project(dps, akaiosdisk_project_byname(&g_disk, argv[++i]));
 				select_tracks(MID_SELNOE);
 				extract_tracks();
 			}

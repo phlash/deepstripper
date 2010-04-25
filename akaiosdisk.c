@@ -100,14 +100,22 @@ void akaiosdisk_clear(AkaiOsDisk *disk) {
 	disk->offset = 0;
 }
 
-// Calculate 64-bit disk offset for specified project.
-// Returns: offset on success, 0 on failure (use perror or strerror)
+// Locate a project by name, return directory entry reference
+// NB: Project names are *not* unique, this locates the *last* project so named
 
-off64_t akaiosdisk_project(AkaiOsDisk *disk, char *name) {
+AkaiOsDisk_Dirent *akaiosdisk_project_byname(AkaiOsDisk *disk, char *name) {
 	AkaiOsDisk_Dirent *e = disk->dir;
 	while (e && strcmp(name, e->name)!=0)
 		e = e->next;
 	if (e)
-		return ((off64_t)e->offset * (off64_t)AOSD_BLOCKSIZE);
-	return 0;
+		return e;
+	return NULL;
 }
+
+// Calculate 64-bit disk offset for specified project.
+// Returns: offset on success, 0 on failure (use perror or strerror)
+
+off64_t akaiosdisk_project_bydent(AkaiOsDisk_Dirent *dent) {
+	return ((off64_t)dent->offset * (off64_t)AOSD_BLOCKSIZE);
+}
+

@@ -1,4 +1,4 @@
-RELEASE=0.2
+RELEASE=0.3
 LIN_FLAGS=$(shell pkg-config --cflags gtk+-2.0) -g
 LIN_LIBS=$(shell pkg-config --libs gtk+-2.0) -g
 
@@ -18,7 +18,7 @@ archive:
 
 linpkg: lin
 	mkdir -p $(LINPKG)/DEBIAN
-	cp control $(LINPKG)/DEBIAN
+	sed -e "s/RELEASE/$(RELEASE)/" control >$(LINPKG)/DEBIAN/control
 	mkdir -p $(LINPKG)/usr/bin
 	cp $(LINOUT)/deepstripper-gtk $(LINPKG)/usr/bin
 	fakeroot dpkg-deb -b $(LINPKG) $(LINPKG).deb

@@ -19,6 +19,7 @@ typedef struct {
 
 int akaiosdisk_read(int fd, AkaiOsDisk *disk);
 void akaiosdisk_clear(AkaiOsDisk *disk);
-off64_t akaiosdisk_project(AkaiOsDisk *disk, char *name);
+AkaiOsDisk_Dirent *akaiosdisk_project_byname(AkaiOsDisk *disk, char *name);
+off64_t akaiosdisk_project_bydent(AkaiOsDisk_Dirent *dent);
 
 #endif
