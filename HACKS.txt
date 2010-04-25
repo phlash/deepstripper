@@ -1,0 +1,14 @@
+Looks like offset 14 holds 32b byte size of project - one block
+           offset 20 holds 32b block offset of this project + one block
+           offset 24 holds 32b block size of project - 1
+
+make @ 00026000
+hbtn @ 0c3eb000
+slith@ 1be60000
+
+make->hbtn:  0c3c5000:	make: data1:14=0c3c4000,20=00000027,24=0000c3c4
+hbtn->slith: 0fa75000:	hbtn: data1:14=0fa74000,20=0000c3ec,24=0000fa74
+slith->city: 07ce5000:	slith:data1:14=07ce4000,20=0001be61,24=00007ce4
+
+All zeros from offset 24 until 1000..
+

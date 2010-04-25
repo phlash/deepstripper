@@ -281,8 +281,8 @@ static void add_multi(AkaiOsDisk_Dirent *dent) {
 static void show_project_info() {
 	char msg[160];
 	if (g_proj.offset) {
-		sprintf(msg, "Name: %s\nSample rate: %d\nSample size: %d\nDef Scene: %s\nOffset: 0x%08llX",
-			g_proj.name, g_proj.splrate, g_proj.splsize, g_proj.defscene.name, g_poff);
+		sprintf(msg, "Name: %s\nSize: %d (%dMiB)\nSample rate: %d\nSample size: %d\nDef Scene: %s\nOffset: 0x%08llX",
+			g_proj.name, g_proj.size, g_proj.size/1048576, g_proj.splrate, g_proj.splsize, g_proj.defscene.name, g_poff);
 		set_info(msg);
 	}
 }

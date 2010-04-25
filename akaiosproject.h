@@ -7,6 +7,7 @@
 #include "akaiosvtrack.h"
 
 typedef struct {
+	unsigned int size;	// project size (bytes)
 	unsigned short offset;	// segment data offset (bytes) from project start
 	unsigned short scnlen;	// length of additional scene data (bytes)
 	int splrate;			// sample rate (sample/sec)

@@ -22,6 +22,7 @@
 #define AOSP_DATA2_SIZE			0x1800
 
 // data block 1 offsets
+#define AOSP_PRJ_SIZE_OFFSET	0x0014
 #define AOSP_HDR_SIZE_OFFSET	0x1016
 #define AOSP_SCN_SIZE_OFFSET	0x102e
 #define AOSP_SPL_RATE_OFFSET	0x110c
@@ -113,6 +114,8 @@ int akaiosproject_read(int fd, int type, AkaiOsProject *proj) {
 	_DBG(_DBG_BLK, "aosp: reading data1 block..\n");
 	if (read(fd, data1, d1)!= d1)
 		return -1;
+	memcpy(&ltmp, &data1[AOSP_PRJ_SIZE_OFFSET], sizeof(ltmp));
+	proj->size = be2hl(ltmp) + 0x1000;
 	memcpy(&tmp, &data1[AOSP_HDR_SIZE_OFFSET], sizeof(tmp));
 	proj->offset = be2hs(tmp) + 0x1000;
 	memcpy(&tmp, &data1[AOSP_SCN_SIZE_OFFSET], sizeof(tmp));

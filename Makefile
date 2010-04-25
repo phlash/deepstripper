@@ -1,4 +1,4 @@
-RELEASE=0.3
+RELEASE=0.4
 LIN_FLAGS=$(shell pkg-config --cflags gtk+-2.0) -g
 LIN_LIBS=$(shell pkg-config --libs gtk+-2.0) -g
 
