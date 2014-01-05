@@ -10,12 +10,13 @@
 #endif
 #include "deepstripper.h"
 #include "akaiosscene.h"
+#include "diskbuffer.h"
 
 int akaiosscene_read(int fd, int type, AkaiOsScene *scn) {
 	// read scene block
 	char buf[AOSS_DPS16_SIZE];
 	int len = AOSP_DPS12==type ? AOSS_DPS12_SIZE : AOSS_DPS16_SIZE;
-	if (read(fd, buf, len)!=len)
+	if (read_buffered(fd, buf, len)!=len)
 		return -1;
 	// copy out name
 	memcpy(scn->name, buf, 16);

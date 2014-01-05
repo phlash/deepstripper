@@ -14,6 +14,7 @@
 #ifdef WIN32
 #define GETCWD	_getcwd
 #define WIN32_LEAN_AND_MEAN
+#include <windows.h>
 #include <io.h>
 #include <fcntl.h>
 #include <share.h>
@@ -307,6 +308,7 @@ static void close_project() {
 	set_info(DEFAULT_INFO);
 	akaiosproject_clear(&g_proj);
 	set_title(NULL, NULL, "");
+	clear_buffer();
 }
 
 // Open a specific project or entire backup (into g_proj)
@@ -514,6 +516,12 @@ static char *get_file(char *title, gboolean save) {
 	if (name)		// From previous call
 		g_free(name);
 	name = NULL;
+#ifdef WIN32
+	GtkWidget *file = gtk_file_selection_new(title);
+	if (gtk_dialog_run(GTK_DIALOG(file))==GTK_RESPONSE_OK) {
+		name = gtk_file_selection_get_filename(GTK_FILE_SELECTION(file));
+	}
+#else
 	GtkWidget *file = gtk_file_chooser_dialog_new(title, GTK_WINDOW(g_main),
 		save ? GTK_FILE_CHOOSER_ACTION_SAVE : GTK_FILE_CHOOSER_ACTION_OPEN,
 		GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL,
@@ -521,6 +529,7 @@ static char *get_file(char *title, gboolean save) {
 	if (gtk_dialog_run(GTK_DIALOG(file))==GTK_RESPONSE_ACCEPT) {
 		name = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(file));
 	}
+#endif
 	gtk_widget_destroy(file);
 	return name;
 }

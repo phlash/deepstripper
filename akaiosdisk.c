@@ -16,6 +16,7 @@
 #include "deepstripper.h"
 #include "akaiosdisk.h"
 #include "akaiosutil.h"
+#include "diskbuffer.h"
 
 // Internal constants
 #define AOSD_DIRENTSIZE	0x20
@@ -36,7 +37,7 @@ int akaiosdisk_read(int fd, AkaiOsDisk *disk) {
 	unsigned int b, o;
 
 // Look for disk signature, then directory start
-	if (read(fd, buf, sizeof(buf))!=sizeof(buf))
+	if (read_buffered(fd, buf, sizeof(buf))!=sizeof(buf))
 		return -1;
 
 	if (memcmp(buf, AOSD_VOLUMEID, 8)!=0)
@@ -44,7 +45,7 @@ int akaiosdisk_read(int fd, AkaiOsDisk *disk) {
 	_DBG(_DBG_BLK, "aosd: found signature, looking for directory\n");
 
 	for (b=1; b<AOSD_MAXBLOCKS; b++) {
-		if (read(fd, buf, sizeof(buf))!=sizeof(buf))
+		if (read_buffered(fd, buf, sizeof(buf))!=sizeof(buf))
 			return -1;
 		if (memcmp(buf, AOSD_DIRENTID, 4)==0)
 			break;
@@ -62,7 +63,7 @@ int akaiosdisk_read(int fd, AkaiOsDisk *disk) {
 		unsigned int ofs;
 		if (o>=AOSD_BLOCKSIZE) {
 			_DBG(_DBG_BLK, "aosd: read directory block\n");
-			if (read(fd, buf, sizeof(buf))!=sizeof(buf))
+			if (read_buffered(fd, buf, sizeof(buf))!=sizeof(buf))
 				return -1;
 			o=0;
 			++b;

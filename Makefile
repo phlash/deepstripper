@@ -2,8 +2,8 @@ RELEASE=0.4
 LIN_FLAGS=$(shell pkg-config --cflags gtk+-2.0) -g
 LIN_LIBS=$(shell pkg-config --libs gtk+-2.0) -g
 
-WIN_FLAGS=-mms-bitfields
-WIN_LIBS=$(shell PKG_CONFIG_PATH=/usr/i586-mingw32msvc/lib/pkgconfig pkg-config --libs-only-l gtk+-win32-2.0)
+WIN_FLAGS=-mms-bitfields $(shell PKG_CONFIG_PATH=gtk-win32/lib/pkgconfig pkg-config --define-variable=prefix=`pwd`/gtk-win32 --cflags gtk+-win32-2.0)
+WIN_LIBS=$(shell PKG_CONFIG_PATH=gtk-win32/lib/pkgconfig pkg-config --define-variable=prefix=`pwd`/gtk-win32 --libs gtk+-win32-2.0)
 
 LINOUT=linux
 LINPKG=deepstripper-gtk-$(RELEASE)
@@ -51,7 +51,8 @@ OBJS=deepstripper-gtk.o \
 	akaiosdisk.o \
 	akaiosproject.o \
 	akaiosscene.o \
-	akaiosutil.o
+	akaiosutil.o \
+	diskbuffer.o
 
 $(LINOUT)/deepstripper-gtk: $(OBJS:%=$(LINOUT)/%)
 	$(CC) -o $@ $^ $(LIBS)

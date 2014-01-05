@@ -112,7 +112,7 @@ int akaiosproject_read(int fd, int type, AkaiOsProject *proj) {
 	int i, sn;
 
 	_DBG(_DBG_BLK, "aosp: reading data1 block..\n");
-	if (read(fd, data1, d1)!= d1)
+	if (read_buffered(fd, data1, d1)!= d1)
 		return -1;
 	memcpy(&ltmp, &data1[AOSP_PRJ_SIZE_OFFSET], sizeof(ltmp));
 	proj->size = be2hl(ltmp) + 0x1000;
@@ -162,7 +162,7 @@ int akaiosproject_read(int fd, int type, AkaiOsProject *proj) {
 	if (akaiosscene_read(fd, type, &proj->defscene))
 		return -1;
 	_DBG(_DBG_BLK, "aosp: reading data2 block..\n");
-	if (read(fd, data2, sizeof(data2))!=sizeof(data2))
+	if (read_buffered(fd, data2, sizeof(data2))!=sizeof(data2))
 		return -1;
 	if (proj->scnlen) {
 		sn = proj->scnlen/sl;
@@ -199,7 +199,7 @@ int akaiosproject_read(int fd, int type, AkaiOsProject *proj) {
 		char segraw[10];
 		unsigned short opvt;
 		unsigned int start, end;
-		if (read(fd, segraw, sizeof(segraw))!=sizeof(segraw))
+		if (read_buffered(fd, segraw, sizeof(segraw))!=sizeof(segraw))
 			return -1;
 		memcpy(&opvt, segraw, sizeof(opvt));
 		opvt = be2hs(opvt);
@@ -327,6 +327,7 @@ unsigned int akaiosproject_extract(AkaiOsProject *proj, char *name, int fdin, in
 		// calculate offset and seek to segment
 		off64_t off = poff + proj->offset + seg->offset;
 		_DBG(_DBG_INT, "aosp: seg %d -> %d @ %08x%08x\n", seg->start, seg->end, (int)(off>>32), (int)off);
+		clear_buffer();
 		if (lseek64(fdin, off, SEEK_SET)==(off64_t)-1) {
 			_DBG(_DBG_BLK,"aosp: unable to seek to segment data\n");
 			goto bail;
@@ -347,7 +348,7 @@ unsigned int akaiosproject_extract(AkaiOsProject *proj, char *name, int fdin, in
 			unsigned int i, n = (seg->end-p)*proj->splbyte;
 			if (n>chk) n=chk;
 			fs += n;
-			if (read(fdin, buf, n)!=n) {
+			if (read_buffered(fdin, buf, n)!=n) {
 				_DBG(_DBG_BLK,"aosp: unable to read segment data\n");
 				goto bail;
 			}
