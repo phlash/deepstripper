@@ -10,6 +10,7 @@
 #define _LARGEFILE64_SOURCE
 #include <stdio.h>
 #include <string.h>
+#include <inttypes.h>
 #include <gtk/gtk.h>
 #ifdef WIN32
 #define GETCWD	_getcwd
@@ -36,7 +37,7 @@ int g_dbg = 0;
 #ifndef RELEASE
 #error Must define RELEASE
 #endif
-#define ABOUT_TEXT "DeepStripper/GTK version %s\nAuthor: Phil Ashby, phil.yahoo@ashbysoft.com\nEnjoy!"
+#define ABOUT_TEXT "DeepStripper/GTK version %s\nAuthor: Phil Ashby, phil.yahoo@ashbysoft.com\nBased on an original work by Dror Kessler\nEnjoy!"
 
 // Default text for info box
 #define DEFAULT_INFO	"Open a project.."
@@ -196,7 +197,7 @@ static void list_selected_iter(GtkTreeModel *model, GtkTreePath *path,
 }
 
 static void list_selection_changed(GtkTreeSelection *sel, gpointer d) {
-	if ((int)d == TAB_TRACKS) {
+	if (GPOINTER_TO_INT(d) == TAB_TRACKS) {
 		set_info("");
 		gtk_tree_selection_selected_foreach(sel, list_selected_iter, d);
 	}
@@ -224,7 +225,7 @@ static GtkWidget *make_list(char *data, gint idx) {
 	cell = gtk_cell_renderer_text_new();
 	col = gtk_tree_view_column_new_with_attributes(data, cell, "text", 0, NULL);
 	gtk_tree_view_append_column(GTK_TREE_VIEW(tree), col);
-	g_signal_connect(g_sels[idx], "changed", G_CALLBACK(list_selection_changed), (gpointer)idx);
+	g_signal_connect(g_sels[idx], "changed", G_CALLBACK(list_selection_changed), GINT_TO_POINTER(idx));
 	gtk_widget_show(tree);
 
 	return scroll;
@@ -236,7 +237,7 @@ static void about_box(char *msg) {
 	if (msg) {
 		about = gtk_message_dialog_new(GTK_WINDOW(g_main),
 		GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_ERROR, GTK_BUTTONS_OK,
-        msg);
+        "%s", msg);
 	} else {
 		about = gtk_message_dialog_new(GTK_WINDOW(g_main),
 		GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_INFO, GTK_BUTTONS_OK,
@@ -282,7 +283,7 @@ static void add_multi(AkaiOsDisk_Dirent *dent) {
 static void show_project_info() {
 	char msg[160];
 	if (g_proj.offset) {
-		sprintf(msg, "Name: %s\nSize: %d (%dMiB)\nSample rate: %d\nSample size: %d\nDef Scene: %s\nOffset: 0x%08llX",
+		sprintf(msg, "Name: %s\nSize: %d (%dMiB)\nSample rate: %d\nSample size: %d\nDef Scene: %s\nOffset: 0x%08"PRIu64,
 			g_proj.name, g_proj.size, g_proj.size/1048576, g_proj.splrate, g_proj.splsize, g_proj.defscene.name, g_poff);
 		set_info(msg);
 	}
@@ -290,7 +291,7 @@ static void show_project_info() {
 
 // Add item to listbox in specified tab
 static int add_to_list(char *item, void *d) {
-	int idx = (int)d;
+	int idx = GPOINTER_TO_INT(d);
 	GtkTreeIter iter;
 
 	gtk_list_store_append(GTK_LIST_STORE(g_data[idx]), &iter);
@@ -420,30 +421,40 @@ static void select_tracks(int type) {
 
 // Extract selected tracks
   // XXXX:TODO:FIXME: .WAV file header, hard coded for 16-bit 44kHz, 1 channel
-static void write_wav(int fd, unsigned int len) {
-	unsigned int ul = len + 36;
+static void write_wav(int fd, AkaiOsProject *proj, unsigned int len) {
+	unsigned int ul = 4 /* WAVE */ + 8 /* fmt+len */ + 40 /* extensible format */ + 8 /* data+len */ + len;
 	unsigned short us;
 	ul = h2lel(ul);
-	write(fd, "RIFF", 4);
-	write(fd, &ul, 4);
-	write(fd, "WAVE", 4);
-	write(fd, "fmt ", 4);
-	ul = h2lel(16);
+	write(fd, "RIFF", 4);	// outer RIFF chunk 4cc
+	write(fd, &ul, 4);		// total size after this counter
+	write(fd, "WAVE", 4);	// WAVE type 4cc
+
+	write(fd, "fmt ", 4);	// fmt sub-chunk 4cc
+	ul = h2lel(40);
+	write(fd, &ul, 4);		// size of fmt chunk (40 fixed)
+	us = h2les(0xfffe);
+	write(fd, &us, 2);		// audio format (0xfffe==extensible)
 	us = h2les(1);
-	write(fd, &ul, 4);
-	write(fd, &us, 2);
-	write(fd, &us, 2);
-	ul = h2lel(44100);
-	write(fd, &ul, 4);
-	ul = h2lel(88200);
-	write(fd, &ul, 4);
-	us = h2les(2);
-	write(fd, &us, 2);
-	us = h2les(16);
-	write(fd, &us, 2);
-	write(fd, "data", 4);
+	write(fd, &us, 2);		// channel count (1)
+	ul = h2lel(proj->splrate);
+	write(fd, &ul, 4);		// sample rate (Hz)
+	ul = h2lel(proj->splrate * proj->splbyte);
+	write(fd, &ul, 4);		// byte rate (Hz)
+	us = h2les(proj->splbyte);
+	write(fd, &us, 2);		// block size (bytes)
+	us = h2les(8 * proj->splbyte);
+	write(fd, &us, 2);		// sample size (adjusted, see valid bits below)
+	us = h2les(22);
+	write(fd, &us, 2);		// extra bytes (22 fixed)
+	us = h2les(proj->splsize);
+	write(fd, &us, 2);		// valid bits/sample (<=adjusted value)
+	ul = h2lel(0);
+	write(fd, &ul, 4);		// channel bitmap (0=default)
+	write(fd, "\x01\x00\x00\x00\x00\x00\x10\x00\x80\x00\x00\xAA\x00\x38\x9B\x71", 16);	// PCM GUID
+
+	write(fd, "data", 4);	// data sub-chunk 4cc
 	ul = h2lel(len);
-	write(fd, &ul, 4);
+	write(fd, &ul, 4);		// data length
 }
 static int update_prog(double frac, void *p) {
 	GtkProgressBar *prog = (GtkProgressBar *)p;
@@ -471,7 +482,7 @@ static void extract_track(gchar *trk, GtkProgressBar *prog) {
 	}
 	// Write WAV header
 	_DBG(_DBG_PRJ, "writing output file\n");
-	write_wav(fd, 0);
+	write_wav(fd, &g_proj, 0);
 	// Write samples
 	lseek64(g_fd, g_poff, SEEK_SET);
 	fs = akaiosproject_extract(&g_proj, trk, g_fd, fd, update_prog, prog);
@@ -483,7 +494,7 @@ static void extract_track(gchar *trk, GtkProgressBar *prog) {
 	} else {
 		// Re-write WAV header with correct file size
 		lseek64(fd, (off64_t)0, SEEK_SET);
-		write_wav(fd, fs);
+		write_wav(fd, &g_proj, fs);
 		close(fd);
 		_DBG(_DBG_PRJ, "file done\n");
 	}
@@ -626,7 +637,7 @@ int main(int argc, char **argv) {
 		if (strcmp(argv[i], "-d")==0) {
 			g_dbg = g_dbg<<1 | 1;
 		} else if (strncmp(argv[i], "-h", 2)==0) {
-			g_print(usage);
+			g_print("%s", usage);
 			return 0;
 		}
 	}
