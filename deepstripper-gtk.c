@@ -420,7 +420,6 @@ static void select_tracks(int type) {
 }
 
 // Extract selected tracks
-  // XXXX:TODO:FIXME: .WAV file header, hard coded for 16-bit 44kHz, 1 channel
 static void write_wav(int fd, AkaiOsProject *proj, unsigned int len) {
 	unsigned int ul = 4 /* WAVE */ + 8 /* fmt+len */ + 40 /* extensible format */ + 8 /* data+len */ + len;
 	unsigned short us;
@@ -592,10 +591,7 @@ static void menu(gpointer d, guint action, GtkWidget *w) {
 		break;
 	case MID_SELEXP:
 		_DBG(_DBG_GUI,"export selected\n");
-		if (g_proj.splbyte==2)
-			extract_tracks();
-		else
-			about_box("FIXME: only 16-bit data can be exported");
+		extract_tracks();
 		break;
 
 	case MID_HELP:

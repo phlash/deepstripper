@@ -1,4 +1,4 @@
-RELEASE=0.6
+RELEASE=0.7
 BITS=$(shell getconf LONG_BIT)
 ifeq ($(BITS),64)
 ARCH=amd64
