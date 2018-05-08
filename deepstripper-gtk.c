@@ -29,6 +29,8 @@
 #include "deepstripper.h"
 #include "akaiosdisk.h"
 #include "akaiosproject.h"
+#include "akaiosutil.h"
+#include "diskbuffer.h"
 
 // Debug text to stdout
 int g_dbg = 0;
@@ -64,7 +66,7 @@ static void menu(gpointer d, guint action, GtkWidget *w);
 #define MID_VERSION	1000
 
 // Menu definition
-static GtkItemFactoryEntry root_menu[] = {
+/*3 static GtkItemFactoryEntry root_menu[] = {
 	{ "/_File/_Open DPS12...", "<CTRL>o", menu, MID_OPEN12, NULL },
 	{ "/_File/Open DPS1_6...", "<CTRL>6", menu, MID_OPEN16, NULL },
 	{ "/_File/_Close", "<CTRL>x", menu, MID_CLOSE, NULL },
@@ -82,7 +84,7 @@ static GtkItemFactoryEntry root_menu[] = {
 	{ "/_Help/_About", "<CTRL>h", menu, MID_HELP, NULL },
 	{ "/Help/_Versions", "<CTRL>v", menu, MID_VERSION, NULL }
 };
-#define MENU_SIZE	(sizeof(root_menu)/sizeof(GtkItemFactoryEntry))
+#define MENU_SIZE	(sizeof(root_menu)/sizeof(GtkItemFactoryEntry))*/
 
 // Globals
 static char g_src[20];
@@ -274,7 +276,7 @@ static void add_multi(AkaiOsDisk_Dirent *dent) {
 			_DBG(_DBG_GUI, "new g_multi->sub\n");
 		}
 		g_signal_connect(item, "activate", G_CALLBACK(multi_menu), (gpointer)dent);
-		gtk_menu_append(GTK_MENU(sub), item);
+//		gtk_menu_append(GTK_MENU(sub), item);
 //		_DBG(_DBG_GUI, "append g_multi->sub, %s\n", name);
 	}
 }
@@ -534,8 +536,8 @@ static char *get_file(char *title, gboolean save) {
 #else
 	GtkWidget *file = gtk_file_chooser_dialog_new(title, GTK_WINDOW(g_main),
 		save ? GTK_FILE_CHOOSER_ACTION_SAVE : GTK_FILE_CHOOSER_ACTION_OPEN,
-		GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL,
-		GTK_STOCK_OPEN, GTK_RESPONSE_ACCEPT, NULL);
+		"_Cancel", GTK_RESPONSE_CANCEL,
+		"_Open", GTK_RESPONSE_ACCEPT, NULL);
 	if (gtk_dialog_run(GTK_DIALOG(file))==GTK_RESPONSE_ACCEPT) {
 		name = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(file));
 	}
@@ -625,7 +627,7 @@ int main(int argc, char **argv) {
 "usage: deepstripper-gtk [-d[ebug]] [-h[elp]] [-o[utput] <path>]\n"
 "       [-dps12|-dps16 <path>] [-e[xtract] <project>]\n";
 	GtkWidget *vbox, *men, *paned, *note, *frame, *scroll;
-	GtkItemFactory *fac;
+//3	GtkItemFactory *fac;
 	GtkAccelGroup *acc;
 	int i, dps = -1;
 
@@ -643,20 +645,20 @@ int main(int argc, char **argv) {
 	set_title("?", GETCWD(buf, sizeof(buf)), "");
 	g_signal_connect(G_OBJECT(g_main), "delete_event", G_CALLBACK(quit), NULL);
 
-	vbox = gtk_vbox_new(FALSE, 0);
+	vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 	gtk_container_add(GTK_CONTAINER(g_main), vbox);
 	gtk_widget_show(vbox);
 
 	acc = gtk_accel_group_new();
-	fac = gtk_item_factory_new(GTK_TYPE_MENU_BAR, "<deepstripper-main>", acc);
+/*3	fac = gtk_item_factory_new(GTK_TYPE_MENU_BAR, "<deepstripper-main>", acc);
 	gtk_item_factory_create_items(fac, MENU_SIZE, root_menu, 0);
 	men = gtk_item_factory_get_widget(fac, "<deepstripper-main>");
 	gtk_box_pack_start(GTK_BOX(vbox), men, FALSE, FALSE, 0);
 	gtk_window_add_accel_group(GTK_WINDOW(g_main), acc);
-	gtk_widget_show(men);
-	g_multi = gtk_item_factory_get_item(fac, "/Multi");
+	gtk_widget_show(men);*/
+//3	g_multi = gtk_item_factory_get_item(fac, "/Multi");
 
-	paned = gtk_hpaned_new();
+	paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
 	gtk_container_set_border_width(GTK_CONTAINER(paned), 5);
 	gtk_box_pack_start(GTK_BOX(vbox), paned, TRUE, TRUE, 0);
 	gtk_widget_show(paned);
@@ -664,7 +666,7 @@ int main(int argc, char **argv) {
 	note = gtk_notebook_new();
 	gtk_notebook_set_tab_pos(GTK_NOTEBOOK(note), GTK_POS_BOTTOM);
 	gtk_notebook_set_show_border(GTK_NOTEBOOK(note), TRUE);
-	gtk_notebook_set_homogeneous_tabs(GTK_NOTEBOOK(note), TRUE);
+//3	gtk_notebook_set_homogeneous_tabs(GTK_NOTEBOOK(note), TRUE);
 	gtk_widget_set_size_request(note, 150, 200);
 	gtk_paned_pack1(GTK_PANED(paned), note, TRUE, FALSE);
 	gtk_widget_show(note);
@@ -690,7 +692,7 @@ int main(int argc, char **argv) {
 	g_info = gtk_label_new(DEFAULT_INFO);
 	gtk_label_set_justify(GTK_LABEL(g_info), GTK_JUSTIFY_LEFT);
 	gtk_label_set_line_wrap(GTK_LABEL(g_info), FALSE);
-	gtk_scrolled_window_add_with_viewport(GTK_SCROLLED_WINDOW(scroll), g_info);
+	gtk_container_add(GTK_CONTAINER(scroll), g_info);
 	gtk_widget_show(g_info);
 
 	g_stat = gtk_statusbar_new();

@@ -1,4 +1,4 @@
-RELEASE=0.7
+RELEASE=0.8
 BITS=$(shell getconf LONG_BIT)
 ifeq ($(BITS),64)
 ARCH=amd64
@@ -6,10 +6,11 @@ else
 ARCH=i386
 endif
 
-LIN_FLAGS=$(shell pkg-config --cflags gtk+-2.0) -g
-LIN_LIBS=$(shell pkg-config --libs gtk+-2.0) -g
+LIN_FLAGS=$(shell pkg-config --cflags gtk+-3.0) -g -fPIC -DGTK_DISABLE_SINGLE_INCLUDES -DGDK_DISABLE_DEPRECATED -DGTK_DISABLE_DEPRECATED -DGSEAL_ENABLE
+LIN_LIBS=$(shell pkg-config --libs gtk+-3.0) -g
 
-WIN_FLAGS=-mms-bitfields $(shell PKG_CONFIG_PATH=gtk-win32/lib/pkgconfig pkg-config --define-variable=prefix=`pwd`/gtk-win32 --cflags gtk+-win32-2.0)
+# Always target 32-bit on windows, we only have 32-bit GTK libraries..
+WIN_FLAGS=-m32 -mms-bitfields $(shell PKG_CONFIG_PATH=gtk-win32/lib/pkgconfig pkg-config --define-variable=prefix=`pwd`/gtk-win32 --cflags gtk+-win32-2.0)
 WIN_LIBS=$(shell PKG_CONFIG_PATH=gtk-win32/lib/pkgconfig pkg-config --define-variable=prefix=`pwd`/gtk-win32 --libs gtk+-win32-2.0)
 
 LINOUT=linux

@@ -4,6 +4,7 @@
 #define _DEEPSTRIPPER_H
 
 extern int g_dbg;
+extern void g_print(const char *, ...);
 #define _DBG(f,...)		{ if(g_dbg & (f)) g_print(__VA_ARGS__); }
 #define _DBG_GUI		1
 #define _DBG_PRJ		2

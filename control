@@ -3,7 +3,7 @@ Version: RELEASE
 Maintainer: Phil Ashby <phil.yahoo@ashbysoft.com>
 Section: utils
 Architecture: ARCH
-Depends: libgtk2.0-0
+Depends: libgtk-3-0
 Description: AKAI DPS12/16 backup audio track extractor
  Deepstripper-gtk is a tool to read backup media from the AKAI Digital Personal
  Studio (DPS) 12 or 16 track hard disk recorders. It is primarily used to pull

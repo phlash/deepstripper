@@ -14,6 +14,8 @@
 #endif
 #include "deepstripper.h"
 #include "akaiosproject.h"
+#include "akaiosutil.h"
+#include "diskbuffer.h"
 
 
 // Internal constants
